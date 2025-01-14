@@ -17,6 +17,7 @@ type EventBus struct {
 	requestQueue  chan *EventPayload
 	responseQueue chan *EventPayload
 	eventRegistry *EventRegistry
+	errorCallback chan error
 }
 
 func NewEventBus() (*EventBus, error) {
@@ -28,6 +29,7 @@ func NewEventBus() (*EventBus, error) {
 		requestQueue:  make(chan *EventPayload, 100),
 		responseQueue: make(chan *EventPayload, 100),
 		eventRegistry: eventRegistry,
+		errorCallback: make(chan error, 100),
 	}
 	return &eventBus, nil
 }
@@ -49,6 +51,8 @@ func (eb *EventBus) Start() *EventBus {
 					eb.responseQueue <- eventPayload
 				case eventPayload := <-eb.responseQueue:
 					eb.ProcessEvent(eventPayload.Name, eventPayload.Payload)
+				case err := <-eb.errorCallback:
+					fmt.Printf("Error processing event: %v\n", err)
 				}
 			}
 		}()
@@ -64,19 +68,19 @@ func (eb *EventBus) Publish(name string, payload interface{}) error {
 	return nil
 }
 
-func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) error {
+func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) {
 	eb.mutex.Lock()
 	defer eb.mutex.Unlock()
 
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Recovered from panic: %v\n", r)
+			eb.errorCallback <- fmt.Errorf("Recovered from panic: %v", r)
 		}
 	}()
 
 	events, err := eb.eventRegistry.Get(eventName)
 	if err != nil {
-		return err
+		eb.errorCallback <- err
 	}
 
 	for _, event := range events {
@@ -88,8 +92,9 @@ func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) error {
 						Name:    *event.saga,
 						Payload: output,
 					}
+				} else {
+					eb.errorCallback <- err
 				}
-				return
 			}
 			if event.next != nil {
 				eb.requestQueue <- &EventPayload{
@@ -99,7 +104,6 @@ func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) error {
 			}
 		}(event)
 	}
-	return nil
 }
 
 func (eb *EventBus) Register(events []*Event) {
