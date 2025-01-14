@@ -57,8 +57,8 @@ func TestEventBus_ProcessEvent(t *testing.T) {
 		return "Processed " + payload.(string), nil
 	}
 	event := &Event{
-		name:    "TestEvent",
-		handler: eventHandler,
+		Name:    "TestEvent",
+		Handler: eventHandler,
 	}
 
 	eb, _ := NewEventBus()
@@ -89,8 +89,8 @@ func TestEventBus_ProcessEventWithError(t *testing.T) {
 	}
 
 	event := &Event{
-		name:    "TestEventWithError",
-		handler: eventHandler,
+		Name:    "TestEventWithError",
+		Handler: eventHandler,
 	}
 
 	eb, _ := NewEventBus()

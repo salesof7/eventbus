@@ -1,8 +1,8 @@
 package eventbus
 
 type Event struct {
-	name    string
-	saga    *string
-	next    *Event
-	handler func(payload interface{}) (interface{}, error)
+	Name    string
+	Saga    *string
+	Next    *Event
+	Handler func(payload interface{}) (interface{}, error)
 }

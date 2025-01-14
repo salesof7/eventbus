@@ -7,7 +7,7 @@ type EventFlow struct {
 }
 
 func (ef *EventFlow) AddEvent(event *Event) *EventFlow {
-	ef.lastEvent.next = event
+	ef.lastEvent.Next = event
 	ef.lastEvent = event
 	return ef
 }
@@ -16,7 +16,7 @@ func (ef *EventFlow) Next(event *Event) *EventFlow {
 	if ef.lastEvent == nil {
 		return ef.AddEvent(event)
 	} else {
-		ef.lastEvent.next = event
+		ef.lastEvent.Next = event
 		ef.lastEvent = event
 	}
 	return ef
@@ -24,11 +24,11 @@ func (ef *EventFlow) Next(event *Event) *EventFlow {
 
 func (ef *EventFlow) Saga(saga *Event) *EventFlow {
 	if ef.lastEvent != nil {
-		ef.lastEvent.saga = &saga.name
+		ef.lastEvent.Saga = &saga.Name
 	}
-	saga.next = nil
+	saga.Next = nil
 	if ef.lastSaga != nil {
-		saga.next = ef.lastSaga
+		saga.Next = ef.lastSaga
 	}
 	ef.lastSaga = saga
 	return ef
@@ -45,7 +45,7 @@ func (ef *EventFlow) Flat() []*Event {
 		}
 		visited[e] = true
 		events = append(events, e)
-		traverse(e.next)
+		traverse(e.Next)
 	}
 	traverse(ef.baseEvent)
 	traverse(ef.lastSaga)

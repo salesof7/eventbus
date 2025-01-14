@@ -17,8 +17,8 @@ func TestNewEventRegistry(t *testing.T) {
 func TestEventRegistry_Register(t *testing.T) {
 	registry := NewEventRegistry()
 
-	event1 := &Event{name: "Event1"}
-	event2 := &Event{name: "Event2"}
+	event1 := &Event{Name: "Event1"}
+	event2 := &Event{Name: "Event2"}
 
 	err := registry.Register([]*Event{event1, event2})
 	if err != nil {
@@ -43,9 +43,9 @@ func TestEventRegistry_Import(t *testing.T) {
 	registry := NewEventRegistry()
 	otherRegistry := NewEventRegistry()
 
-	event1 := &Event{name: "Event1"}
-	event2 := &Event{name: "Event2"}
-	event3 := &Event{name: "Event1"}
+	event1 := &Event{Name: "Event1"}
+	event2 := &Event{Name: "Event2"}
+	event3 := &Event{Name: "Event1"}
 
 	err := otherRegistry.Register([]*Event{event1, event2, event3})
 	if err != nil {
@@ -73,8 +73,8 @@ func TestEventRegistry_Import(t *testing.T) {
 func TestEventRegistry_Get(t *testing.T) {
 	registry := NewEventRegistry()
 
-	event1 := &Event{name: "Event1"}
-	event2 := &Event{name: "Event2"}
+	event1 := &Event{Name: "Event1"}
+	event2 := &Event{Name: "Event2"}
 
 	err := registry.Register([]*Event{event1, event2})
 	if err != nil {

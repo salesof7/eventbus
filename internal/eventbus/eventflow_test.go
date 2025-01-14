@@ -5,66 +5,66 @@ import (
 )
 
 func TestEventFlow_AddEvent(t *testing.T) {
-	baseEvent := &Event{name: "BaseEvent"}
+	baseEvent := &Event{Name: "BaseEvent"}
 	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
 
-	event1 := &Event{name: "Event1"}
+	event1 := &Event{Name: "Event1"}
 	flow.AddEvent(event1)
 
 	if flow.lastEvent != event1 {
 		t.Errorf("Expected last event to be %v, got %v", event1, flow.lastEvent)
 	}
-	if flow.baseEvent.next != event1 {
-		t.Errorf("Expected baseEvent.next to point to %v, got %v", event1, flow.baseEvent.next)
+	if flow.baseEvent.Next != event1 {
+		t.Errorf("Expected baseEvent.Next to point to %v, got %v", event1, flow.baseEvent.Next)
 	}
 }
 
 func TestEventFlow_Next(t *testing.T) {
-	baseEvent := &Event{name: "BaseEvent"}
+	baseEvent := &Event{Name: "BaseEvent"}
 	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
 
-	event1 := &Event{name: "Event1"}
+	event1 := &Event{Name: "Event1"}
 	flow.Next(event1)
 
 	if flow.lastEvent != event1 {
 		t.Errorf("Expected last event to be %v, got %v", event1, flow.lastEvent)
 	}
 
-	if flow.baseEvent.next != event1 {
-		t.Errorf("Expected baseEvent.next to point to %v, got %v", event1, flow.baseEvent.next)
+	if flow.baseEvent.Next != event1 {
+		t.Errorf("Expected baseEvent.Next to point to %v, got %v", event1, flow.baseEvent.Next)
 	}
 
-	event2 := &Event{name: "Event2"}
+	event2 := &Event{Name: "Event2"}
 	flow.Next(event2)
 
 	if flow.lastEvent != event2 {
 		t.Errorf("Expected last event to be %v, got %v", event2, flow.lastEvent)
 	}
-	if event1.next != event2 {
-		t.Errorf("Expected event1.next to point to %v, got %v", event2, event1.next)
+	if event1.Next != event2 {
+		t.Errorf("Expected event1.Next to point to %v, got %v", event2, event1.Next)
 	}
 }
 
 func TestEventFlow_Saga(t *testing.T) {
-	baseEvent := &Event{name: "BaseEvent"}
+	baseEvent := &Event{Name: "BaseEvent"}
 	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
 
-	saga := &Event{name: "SagaEvent"}
+	saga := &Event{Name: "SagaEvent"}
 	flow.Saga(saga)
 
 	if flow.lastSaga != saga {
 		t.Errorf("Expected last saga to be %v, got %v", saga, flow.lastSaga)
 	}
 
-	if baseEvent.saga == nil || *baseEvent.saga != saga.name {
-		t.Errorf("Expected baseEvent.saga to point to %v, got %v", saga.name, baseEvent.saga)
+	if baseEvent.Saga == nil || *baseEvent.Saga != saga.Name {
+		t.Errorf("Expected baseEvent.saga to point to %v, got %v", saga.Name, baseEvent.Saga)
 	}
 
-	saga2 := &Event{name: "SagaEvent2"}
+	saga2 := &Event{Name: "SagaEvent2"}
 	flow.Saga(saga2)
 
-	if saga2.next != saga {
-		t.Errorf("Expected saga2.next to point to %v, got %v", saga, saga2.next)
+	if saga2.Next != saga {
+		t.Errorf("Expected saga2.Next to point to %v, got %v", saga, saga2.Next)
 	}
 
 	if flow.lastSaga != saga2 {
@@ -73,12 +73,12 @@ func TestEventFlow_Saga(t *testing.T) {
 }
 
 func TestEventFlow_Flat(t *testing.T) {
-	baseEvent := &Event{name: "BaseEvent"}
+	baseEvent := &Event{Name: "BaseEvent"}
 	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
 
-	event1 := &Event{name: "Event1"}
-	event2 := &Event{name: "Event2"}
-	saga := &Event{name: "SagaEvent"}
+	event1 := &Event{Name: "Event1"}
+	event2 := &Event{Name: "Event2"}
+	saga := &Event{Name: "SagaEvent"}
 
 	flow.Next(event1).Next(event2).Saga(saga)
 
@@ -90,8 +90,8 @@ func TestEventFlow_Flat(t *testing.T) {
 	}
 
 	for i, e := range events {
-		if e.name != expectedNames[i] {
-			t.Errorf("Expected event %d to be %v, got %v", i, expectedNames[i], e.name)
+		if e.Name != expectedNames[i] {
+			t.Errorf("Expected event %d to be %v, got %v", i, expectedNames[i], e.Name)
 		}
 	}
 }

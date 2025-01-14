@@ -1,8 +1,13 @@
 package eventbus
 
 import (
+	"context"
 	"fmt"
 	"sync"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type EventPayload struct {
@@ -18,9 +23,11 @@ type EventBus struct {
 	responseQueue chan *EventPayload
 	eventRegistry *EventRegistry
 	errorCallback chan error
+	tracer        trace.Tracer
 }
 
 func NewEventBus() (*EventBus, error) {
+	tracer := otel.Tracer("eventbus")
 	eventRegistry := NewEventRegistry()
 	eventBus := EventBus{
 		mutex:         &sync.Mutex{},
@@ -30,6 +37,7 @@ func NewEventBus() (*EventBus, error) {
 		responseQueue: make(chan *EventPayload, 100),
 		eventRegistry: eventRegistry,
 		errorCallback: make(chan error, 100),
+		tracer:        tracer,
 	}
 	return &eventBus, nil
 }
@@ -52,6 +60,9 @@ func (eb *EventBus) Start() *EventBus {
 				case eventPayload := <-eb.responseQueue:
 					eb.ProcessEvent(eventPayload.Name, eventPayload.Payload)
 				case err := <-eb.errorCallback:
+					_, span := eb.tracer.Start(context.Background(), "ErrorCallback")
+					span.SetAttributes(attribute.String("error", err.Error()))
+					span.End()
 					fmt.Printf("Error processing event: %v\n", err)
 				}
 			}
@@ -69,6 +80,9 @@ func (eb *EventBus) Publish(name string, payload interface{}) error {
 }
 
 func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) {
+	ctx, span := eb.tracer.Start(context.Background(), "ProcessEvent")
+	defer span.End()
+
 	eb.mutex.Lock()
 	defer eb.mutex.Unlock()
 
@@ -85,20 +99,23 @@ func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) {
 
 	for _, event := range events {
 		go func(e *Event) {
-			output, err := event.handler(payload)
+			_, eventSpan := eb.tracer.Start(ctx, "EventHandler", trace.WithAttributes(attribute.String("event_name", event.Name)))
+			defer eventSpan.End()
+
+			output, err := event.Handler(payload)
 			if err != nil {
-				if event.saga != nil {
+				if event.Saga != nil {
 					eb.requestQueue <- &EventPayload{
-						Name:    *event.saga,
+						Name:    *event.Saga,
 						Payload: output,
 					}
 				} else {
 					eb.errorCallback <- err
 				}
 			}
-			if event.next != nil {
+			if event.Next != nil {
 				eb.requestQueue <- &EventPayload{
-					Name:    event.next.name,
+					Name:    event.Next.Name,
 					Payload: output,
 				}
 			}

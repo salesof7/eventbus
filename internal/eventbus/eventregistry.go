@@ -20,7 +20,7 @@ func (r *EventRegistry) Register(events []*Event) error {
 		if event == nil {
 			return errors.New("cannot register a nil event")
 		}
-		r.events[event.name] = append(r.events[event.name], event)
+		r.events[event.Name] = append(r.events[event.Name], event)
 	}
 	return nil
 }
