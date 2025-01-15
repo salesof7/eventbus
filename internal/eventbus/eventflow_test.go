@@ -9,7 +9,7 @@ func TestEventFlow_AddEvent(t *testing.T) {
 	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
 
 	event1 := &Event{Name: "Event1"}
-	flow.AddEvent(event1)
+	flow.Next(event1)
 
 	if flow.lastEvent != event1 {
 		t.Errorf("Expected last event to be %v, got %v", event1, flow.lastEvent)

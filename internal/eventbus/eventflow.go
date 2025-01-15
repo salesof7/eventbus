@@ -6,15 +6,10 @@ type EventFlow struct {
 	lastSaga  *Event
 }
 
-func (ef *EventFlow) AddEvent(event *Event) *EventFlow {
-	ef.lastEvent.Next = event
-	ef.lastEvent = event
-	return ef
-}
-
 func (ef *EventFlow) Next(event *Event) *EventFlow {
 	if ef.lastEvent == nil {
-		return ef.AddEvent(event)
+		ef.baseEvent = event
+		ef.lastEvent = event
 	} else {
 		ef.lastEvent.Next = event
 		ef.lastEvent = event

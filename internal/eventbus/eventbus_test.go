@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewEventBus(t *testing.T) {
-	eb, err := NewEventBus()
+	eb, err := NewEventBus(nil, nil)
 	if err != nil {
 		t.Fatalf("Error creating EventBus: %v", err)
 	}
@@ -17,7 +17,7 @@ func TestNewEventBus(t *testing.T) {
 }
 
 func TestEventBus_StartStop(t *testing.T) {
-	eb, _ := NewEventBus()
+	eb, _ := NewEventBus(nil, nil)
 	eb.Start()
 
 	select {
@@ -31,7 +31,7 @@ func TestEventBus_StartStop(t *testing.T) {
 }
 
 func TestEventBus_Publish(t *testing.T) {
-	eb, _ := NewEventBus()
+	eb, _ := NewEventBus(nil, nil)
 	eb.Start()
 
 	err := eb.Publish("TestEvent", "Test Payload")
@@ -61,7 +61,7 @@ func TestEventBus_ProcessEvent(t *testing.T) {
 		Handler: eventHandler,
 	}
 
-	eb, _ := NewEventBus()
+	eb, _ := NewEventBus(nil, nil)
 	eb.Start()
 	eb.Register([]*Event{event})
 
@@ -93,7 +93,7 @@ func TestEventBus_ProcessEventWithError(t *testing.T) {
 		Handler: eventHandler,
 	}
 
-	eb, _ := NewEventBus()
+	eb, _ := NewEventBus(nil, nil)
 	eb.Start()
 	eb.Register([]*Event{event})
 

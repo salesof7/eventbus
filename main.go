@@ -21,7 +21,8 @@ func main() {
 	)
 	otel.SetTracerProvider(tp)
 
-	bus, err := eventbus.NewEventBus()
+	tracer := otel.Tracer("eventbus")
+	bus, err := eventbus.NewEventBus(nil, tracer)
 	if err != nil {
 		log.Fatalf("failed to create eventbus: %v", err)
 	}

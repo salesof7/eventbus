@@ -10,6 +10,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type EventBroker interface {
+	Publish(eventPayload *EventPayload, topic string) error
+	Consume(responseQueue chan *EventPayload, errorCallback chan error) (*EventPayload, error)
+}
+
 type EventPayload struct {
 	Name    string
 	Payload interface{}
@@ -24,10 +29,13 @@ type EventBus struct {
 	eventRegistry *EventRegistry
 	errorCallback chan error
 	tracer        trace.Tracer
+	eventBroker   EventBroker
 }
 
-func NewEventBus() (*EventBus, error) {
-	tracer := otel.Tracer("eventbus")
+func NewEventBus(eventBroker EventBroker, tracer trace.Tracer) (*EventBus, error) {
+	if tracer == nil {
+		tracer = otel.Tracer("noop")
+	}
 	eventRegistry := NewEventRegistry()
 	eventBus := EventBus{
 		mutex:         &sync.Mutex{},
@@ -35,8 +43,9 @@ func NewEventBus() (*EventBus, error) {
 		stopChannel:   make(chan struct{}),
 		requestQueue:  make(chan *EventPayload, 100),
 		responseQueue: make(chan *EventPayload, 100),
-		eventRegistry: eventRegistry,
 		errorCallback: make(chan error, 100),
+		eventRegistry: eventRegistry,
+		eventBroker:   eventBroker,
 		tracer:        tracer,
 	}
 	return &eventBus, nil
@@ -50,20 +59,36 @@ func (eb *EventBus) Stop() {
 
 func (eb *EventBus) Start() *EventBus {
 	eb.onceInit.Do(func() {
+
 		go func() {
 			for {
 				select {
 				case <-eb.stopChannel:
 					return
 				case eventPayload := <-eb.requestQueue:
-					eb.responseQueue <- eventPayload
+					_, span := eb.tracer.Start(context.Background(), "errorCallback")
+					span.SetAttributes(attribute.String("event", eventPayload.Name))
+					span.SetAttributes(attribute.String("payload", fmt.Sprintf("%v", eventPayload.Payload)))
+					defer span.End()
+					if eb.eventBroker != nil {
+						err := eb.eventBroker.Publish(eventPayload, "event_topic")
+						if err != nil {
+							eb.errorCallback <- fmt.Errorf("failed to publish message: %w", err)
+						}
+					} else {
+						eb.responseQueue <- eventPayload
+					}
 				case eventPayload := <-eb.responseQueue:
 					eb.ProcessEvent(eventPayload.Name, eventPayload.Payload)
 				case err := <-eb.errorCallback:
-					_, span := eb.tracer.Start(context.Background(), "ErrorCallback")
+					_, span := eb.tracer.Start(context.Background(), "errorCallback")
 					span.SetAttributes(attribute.String("error", err.Error()))
 					span.End()
 					fmt.Printf("Error processing event: %v\n", err)
+				default:
+					if eb.eventBroker != nil {
+						eb.eventBroker.Consume(eb.responseQueue, eb.errorCallback)
+					}
 				}
 			}
 		}()
@@ -88,7 +113,7 @@ func (eb *EventBus) ProcessEvent(eventName string, payload interface{}) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			eb.errorCallback <- fmt.Errorf("Recovered from panic: %v", r)
+			eb.errorCallback <- fmt.Errorf("recovered from panic: %v", r)
 		}
 	}()
 
