@@ -2,96 +2,108 @@ package eventbus
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestEventFlow_AddEvent(t *testing.T) {
-	baseEvent := &Event{Name: "BaseEvent"}
-	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
-
-	event1 := &Event{Name: "Event1"}
-	flow.Next(event1)
-
-	if flow.lastEvent != event1 {
-		t.Errorf("Expected last event to be %v, got %v", event1, flow.lastEvent)
-	}
-	if flow.baseEvent.Next != event1 {
-		t.Errorf("Expected baseEvent.Next to point to %v, got %v", event1, flow.baseEvent.Next)
-	}
+func TestNewEventFlow(t *testing.T) {
+	ef := &EventFlow{}
+	assert.Nil(t, ef.baseEvent, "baseEvent deve ser nil inicialmente")
+	assert.Nil(t, ef.lastEvent, "lastEvent deve ser nil inicialmente")
+	assert.Nil(t, ef.lastSaga, "lastSaga deve ser nil inicialmente")
 }
 
-func TestEventFlow_Next(t *testing.T) {
-	baseEvent := &Event{Name: "BaseEvent"}
-	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
+func TestNextSingleEvent(t *testing.T) {
+	ef := &EventFlow{}
+	event := &Event{Name: "event1"}
+	ef.Next(event)
 
-	event1 := &Event{Name: "Event1"}
-	flow.Next(event1)
-
-	if flow.lastEvent != event1 {
-		t.Errorf("Expected last event to be %v, got %v", event1, flow.lastEvent)
-	}
-
-	if flow.baseEvent.Next != event1 {
-		t.Errorf("Expected baseEvent.Next to point to %v, got %v", event1, flow.baseEvent.Next)
-	}
-
-	event2 := &Event{Name: "Event2"}
-	flow.Next(event2)
-
-	if flow.lastEvent != event2 {
-		t.Errorf("Expected last event to be %v, got %v", event2, flow.lastEvent)
-	}
-	if event1.Next != event2 {
-		t.Errorf("Expected event1.Next to point to %v, got %v", event2, event1.Next)
-	}
+	assert.Equal(t, event, ef.baseEvent, "baseEvent deve ser o evento adicionado")
+	assert.Equal(t, event, ef.lastEvent, "lastEvent deve ser o evento adicionado")
+	assert.Nil(t, ef.lastSaga, "lastSaga deve permanecer nil")
 }
 
-func TestEventFlow_Saga(t *testing.T) {
-	baseEvent := &Event{Name: "BaseEvent"}
-	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
+func TestNextMultipleEvents(t *testing.T) {
+	ef := &EventFlow{}
+	event1 := &Event{Name: "event1"}
+	event2 := &Event{Name: "event2"}
+	event3 := &Event{Name: "event3"}
 
-	saga := &Event{Name: "SagaEvent"}
-	flow.Saga(saga)
+	ef.Next(event1).Next(event2).Next(event3)
 
-	if flow.lastSaga != saga {
-		t.Errorf("Expected last saga to be %v, got %v", saga, flow.lastSaga)
-	}
-
-	if baseEvent.Saga == nil || *baseEvent.Saga != saga.Name {
-		t.Errorf("Expected baseEvent.saga to point to %v, got %v", saga.Name, baseEvent.Saga)
-	}
-
-	saga2 := &Event{Name: "SagaEvent2"}
-	flow.Saga(saga2)
-
-	if saga2.Next != saga {
-		t.Errorf("Expected saga2.Next to point to %v, got %v", saga, saga2.Next)
-	}
-
-	if flow.lastSaga != saga2 {
-		t.Errorf("Expected last saga to be %v, got %v", saga2, flow.lastSaga)
-	}
+	assert.Equal(t, event1, ef.baseEvent, "baseEvent deve ser o primeiro evento")
+	assert.Equal(t, event3, ef.lastEvent, "lastEvent deve ser o último evento")
+	assert.Equal(t, event2, event1.Next, "event1.Next deve apontar para event2")
+	assert.Equal(t, event3, event2.Next, "event2.Next deve apontar para event3")
+	assert.Nil(t, event3.Next, "event3.Next deve ser nil")
+	assert.Nil(t, ef.lastSaga, "lastSaga deve permanecer nil")
 }
 
-func TestEventFlow_Flat(t *testing.T) {
-	baseEvent := &Event{Name: "BaseEvent"}
-	flow := &EventFlow{baseEvent: baseEvent, lastEvent: baseEvent}
+func TestSagaSingleSaga(t *testing.T) {
+	ef := &EventFlow{}
+	event := &Event{Name: "event1"}
+	saga := &Event{Name: "saga1"}
 
-	event1 := &Event{Name: "Event1"}
-	event2 := &Event{Name: "Event2"}
-	saga := &Event{Name: "SagaEvent"}
+	ef.Next(event).Saga(saga)
 
-	flow.Next(event1).Next(event2).Saga(saga)
+	assert.Equal(t, event, ef.baseEvent, "baseEvent deve ser o evento inicial")
+	assert.Equal(t, event, ef.lastEvent, "lastEvent deve ser o evento inicial")
+	assert.Equal(t, "saga1", *event.Saga, "event.Saga deve apontar para o nome do saga")
+	assert.Equal(t, saga, ef.lastSaga, "lastSaga deve ser o saga adicionado")
+	assert.Nil(t, saga.Next, "saga.Next deve ser nil")
+}
 
-	events := flow.Flat()
+func TestSagaMultipleSagas(t *testing.T) {
+	ef := &EventFlow{}
+	event1 := &Event{Name: "event1"}
+	event2 := &Event{Name: "event2"}
+	saga1 := &Event{Name: "saga1"}
+	saga2 := &Event{Name: "saga2"}
 
-	expectedNames := []string{"BaseEvent", "Event1", "Event2", "SagaEvent"}
-	if len(events) != len(expectedNames) {
-		t.Fatalf("Expected %d events, got %d", len(expectedNames), len(events))
-	}
+	ef.Next(event1).Saga(saga1).Next(event2).Saga(saga2)
 
-	for i, e := range events {
-		if e.Name != expectedNames[i] {
-			t.Errorf("Expected event %d to be %v, got %v", i, expectedNames[i], e.Name)
-		}
-	}
+	assert.Equal(t, event1, ef.baseEvent, "baseEvent deve ser o primeiro evento")
+	assert.Equal(t, event2, ef.lastEvent, "lastEvent deve ser o segundo evento")
+	assert.Equal(t, "saga1", *event1.Saga, "event1.Saga deve apontar para saga1")
+	assert.Equal(t, "saga2", *event2.Saga, "event2.Saga deve apontar para saga2")
+	assert.Equal(t, saga2, ef.lastSaga, "lastSaga deve ser o segundo saga")
+	assert.Equal(t, saga1, saga2.Next, "saga2.Next deve apontar para saga1")
+	assert.Nil(t, saga1.Next, "saga1.Next deve ser nil")
+}
+
+func TestFlatEmpty(t *testing.T) {
+	ef := &EventFlow{}
+	events := ef.Flat()
+	assert.Empty(t, events, "Flat deve retornar uma lista vazia para um EventFlow vazio")
+}
+
+func TestFlatWithEventsAndSagas(t *testing.T) {
+	ef := &EventFlow{}
+	event1 := &Event{Name: "event1"}
+	event2 := &Event{Name: "event2"}
+	saga1 := &Event{Name: "saga1"}
+	saga2 := &Event{Name: "saga2"}
+
+	ef.Next(event1).Saga(saga1).Next(event2).Saga(saga2)
+
+	events := ef.Flat()
+	assert.Len(t, events, 4, "Flat deve retornar todos os eventos e sagas")
+	assert.Contains(t, events, event1, "Flat deve incluir event1")
+	assert.Contains(t, events, event2, "Flat deve incluir event2")
+	assert.Contains(t, events, saga1, "Flat deve incluir saga1")
+	assert.Contains(t, events, saga2, "Flat deve incluir saga2")
+}
+
+func TestFlatWithCycle(t *testing.T) {
+	ef := &EventFlow{}
+	event1 := &Event{Name: "event1"}
+	event2 := &Event{Name: "event2"}
+	event1.Next = event2
+	event2.Next = event1
+
+	ef.Next(event1)
+	events := ef.Flat()
+	assert.Len(t, events, 2, "Flat deve lidar com ciclos e retornar apenas eventos únicos")
+	assert.Contains(t, events, event1, "Flat deve incluir event1")
+	assert.Contains(t, events, event2, "Flat deve incluir event2")
 }

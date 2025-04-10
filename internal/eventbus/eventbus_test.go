@@ -4,110 +4,131 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
+type MockEventBroker struct{}
+
+func (m *MockEventBroker) Publish(eventPayload *EventPayload, topic string) error {
+	return nil
+}
+
+func (m *MockEventBroker) Consume(responseQueue chan *EventPayload, errorCallback chan error) (*EventPayload, error) {
+	return nil, nil
+}
+
 func TestNewEventBus(t *testing.T) {
-	eb, err := NewEventBus(nil, nil)
-	if err != nil {
-		t.Fatalf("Error creating EventBus: %v", err)
+	config := EventBusConfig{
+		RequestQueueSize:  10,
+		ResponseQueueSize: 10,
+		ErrorQueueSize:    10,
+		WorkerPoolSize:    5,
+		BatchSize:         5,
+		Timeout:           2 * time.Second,
 	}
-	if eb == nil {
-		t.Fatal("Expected a non-nil EventBus")
-	}
+	eventBus, err := NewEventBus(&MockEventBroker{}, nil, config)
+	assert.NoError(t, err)
+	assert.NotNil(t, eventBus)
+	assert.Equal(t, 10, cap(eventBus.requestQueue), "Tamanho da fila de requisições deve ser 10")
+	assert.Equal(t, 10, cap(eventBus.responseQueue), "Tamanho da fila de respostas deve ser 10")
+	assert.Equal(t, 10, cap(eventBus.errorCallback), "Tamanho da fila de erros deve ser 10")
+	assert.Equal(t, 5, cap(eventBus.workerPool), "Tamanho do worker pool deve ser 5")
+	assert.Equal(t, 5, cap(eventBus.batch), "Tamanho do batch deve ser 5")
 }
 
-func TestEventBus_StartStop(t *testing.T) {
-	eb, _ := NewEventBus(nil, nil)
-	eb.Start()
-
-	select {
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	eb.Stop()
-	select {
-	case <-time.After(100 * time.Millisecond):
-	}
-}
-
-func TestEventBus_Publish(t *testing.T) {
-	eb, _ := NewEventBus(nil, nil)
-	eb.Start()
-
-	err := eb.Publish("TestEvent", "Test Payload")
-	if err != nil {
-		t.Fatalf("Failed to publish event: %v", err)
-	}
-
-	select {
-	case eventPayload := <-eb.responseQueue:
-		if eventPayload.Name != "TestEvent" {
-			t.Fatalf("Expected event name 'TestEvent', got %s", eventPayload.Name)
-		}
-		if eventPayload.Payload != "Test Payload" {
-			t.Fatalf("Expected payload 'Test Payload', got %v", eventPayload.Payload)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Event was not processed in time")
-	}
-}
-
-func TestEventBus_ProcessEvent(t *testing.T) {
-	eventHandler := func(payload interface{}) (interface{}, error) {
-		return "Processed " + payload.(string), nil
-	}
+func TestRegisterEvents(t *testing.T) {
+	eventBus, _ := NewEventBus(nil, nil, EventBusConfig{})
 	event := &Event{
-		Name:    "TestEvent",
-		Handler: eventHandler,
+		Name: "test_event",
+		Handler: func(payload interface{}) (interface{}, error) {
+			return nil, nil
+		},
 	}
-
-	eb, _ := NewEventBus(nil, nil)
-	eb.Start()
-	eb.Register([]*Event{event})
-
-	err := eb.Publish("TestEvent", "TestPayload")
-	if err != nil {
-		t.Fatalf("Failed to publish event: %v", err)
-	}
-
-	select {
-	case eventPayload := <-eb.responseQueue:
-		if eventPayload.Name != "TestEvent" {
-			t.Fatalf("Expected event name 'TestEvent', got %s", eventPayload.Name)
-		}
-		if eventPayload.Payload != "TestPayload" {
-			t.Fatalf("Expected payload 'TestPayload', got %v", eventPayload.Payload)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Event was not processed in time")
-	}
+	eventBus.Register([]*Event{event})
+	events, err := eventBus.eventRegistry.Get("test_event")
+	assert.NoError(t, err)
+	assert.Len(t, events, 1, "Deve haver exatamente 1 evento registrado")
+	assert.Equal(t, "test_event", events[0].Name, "O nome do evento deve ser 'test_event'")
 }
 
-func TestEventBus_ProcessEventWithError(t *testing.T) {
-	eventHandler := func(payload interface{}) (interface{}, error) {
-		return nil, fmt.Errorf("handler error")
+func TestPublishAndProcessEvent(t *testing.T) {
+	eventBus, _ := NewEventBus(nil, nil, EventBusConfig{
+		BatchSize: 1,
+	})
+	var handlerCalled bool
+	event := &Event{
+		Name: "test_event",
+		Handler: func(payload interface{}) (interface{}, error) {
+			handlerCalled = true
+			return nil, nil
+		},
 	}
+	eventBus.Register([]*Event{event})
+	eventBus.Start()
+	defer eventBus.Stop()
+
+	err := eventBus.Publish("test_event", nil)
+	assert.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+	assert.True(t, handlerCalled, "O handler deve ser chamado após a publicação")
+}
+
+func TestErrorHandling(t *testing.T) {
+	eventBus, _ := NewEventBus(nil, nil, EventBusConfig{
+		BatchSize: 1,
+	})
+
+	testErrorChan := make(chan error, 1)
+	eventBus.errorCallback = testErrorChan
 
 	event := &Event{
-		Name:    "TestEventWithError",
-		Handler: eventHandler,
+		Name: "error_event",
+		Handler: func(payload interface{}) (interface{}, error) {
+			return nil, fmt.Errorf("handler error")
+		},
 	}
+	eventBus.Register([]*Event{event})
+	eventBus.Start()
+	defer eventBus.Stop()
 
-	eb, _ := NewEventBus(nil, nil)
-	eb.Start()
-	eb.Register([]*Event{event})
-
-	err := eb.Publish("TestEventWithError", "TestPayload")
-	if err != nil {
-		t.Fatalf("Failed to publish event: %v", err)
-	}
+	err := eventBus.Publish("error_event", nil)
+	assert.NoError(t, err)
 
 	select {
-	case eventPayload := <-eb.responseQueue:
-		if eventPayload.Name != "TestEventWithError" {
-			t.Fatalf("Expected event name 'TestEventWithError', got %s", eventPayload.Name)
-		}
-		t.Fatal("Expected an error during event processing, but none occurred")
-	case <-time.After(100 * time.Millisecond):
+	case err := <-testErrorChan:
+		assert.EqualError(t, err, "handler error", "O erro retornado pelo handler deve ser capturado")
+	case <-time.After(1 * time.Second):
+		t.Error("Esperava um erro no canal errorCallback, mas não foi recebido")
+	}
+}
+
+func TestQueueFull(t *testing.T) {
+	eventBus, _ := NewEventBus(nil, nil, EventBusConfig{
+		RequestQueueSize: 1,
+	})
+	eventBus.Start()
+	defer eventBus.Stop()
+
+	err := eventBus.Publish("test_event", nil)
+	assert.NoError(t, err)
+
+	err = eventBus.Publish("test_event", nil)
+	assert.Error(t, err)
+	assert.EqualError(t, err, "request queue full", "Deve retornar erro quando a fila está cheia")
+}
+
+func TestStop(t *testing.T) {
+	eventBus, _ := NewEventBus(nil, nil, EventBusConfig{})
+	eventBus.Start()
+
+	eventBus.Stop()
+
+	select {
+	case <-eventBus.stopChannel:
+
+	default:
+		t.Error("O canal stopChannel deveria estar fechado após Stop()")
 	}
 }
